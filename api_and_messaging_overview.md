@@ -1,6 +1,6 @@
-# APIs and Messaging: REST, SOAP, RPC, and Kafka
+# APIs, Messaging, and Storage: REST, SOAP, RPC, Kafka, and Database Storage Models
 
-This document summarizes the differences between common ways systems communicate over a network.
+This document summarizes the differences between common ways systems communicate over a network, plus key database storage models.
 
 ---
 
@@ -139,3 +139,85 @@ result = calculator.add(5, 3)
 - Use **SOAP** when strict contracts, security, and enterprise interoperability are required.
 - Use **RPC/gRPC** for fast, typed, internal service-to-service calls.
 - Use **Kafka** when you need asynchronous, durable, scalable messaging between systems without tight coupling.
+
+---
+
+## 5. Row-Oriented vs Column-Oriented Storage
+
+This is about how databases physically lay out data on disk. The choice matters a lot depending on whether you are doing transactions or analytics.
+
+### Row-oriented storage
+
+Data for a single row is stored together, contiguously on disk.
+
+| id | name | age | city |
+|---|---|---|---|
+| 1 | Alice | 30 | NYC |
+| 2 | Bob | 25 | LA |
+| 3 | Carol | 35 | NYC |
+
+Stored roughly as:
+```
+(1, Alice, 30, NYC), (2, Bob, 25, LA), (3, Carol, 35, NYC), ...
+```
+
+- Best for **OLTP** (Online Transaction Processing): many small reads/writes of full rows.
+- Examples: PostgreSQL, MySQL, SQL Server, SQLite.
+
+#### Pros
+- Fast for `INSERT`, `UPDATE`, `DELETE` operations.
+- Fast when you need most or all columns of a row.
+- Natural fit for transactional applications.
+
+#### Cons
+- Slow when querying a few columns across many rows (reads lots of unnecessary data).
+- Compression is less effective because values of different types are mixed together.
+
+---
+
+### Column-oriented storage
+
+Data for each column is stored together, separately from other columns.
+
+Stored roughly as:
+```
+id:   1, 2, 3, ...
+name: Alice, Bob, Carol, ...
+age:  30, 25, 35, ...
+city: NYC, LA, NYC, ...
+```
+
+- Best for **OLAP** (Online Analytical Processing): aggregations over huge datasets.
+- Examples: Amazon Redshift, Snowflake, ClickHouse, Apache Parquet, Apache ORC.
+
+#### Pros
+- Very fast for queries that scan only a few columns (e.g. `SELECT AVG(age) FROM users`).
+- Excellent compression because values in a column are usually similar in type and value.
+- Great for read-heavy analytical workloads.
+
+#### Cons
+- Slow for row-level reads and writes.
+- Inserts/updates are more expensive because a single row touches many separate column files.
+- Not ideal for transactional applications.
+
+---
+
+## Storage Model Comparison
+
+| Aspect | Row-oriented | Column-oriented |
+|---|---|---|
+| Data layout | Whole rows together | Each column together |
+| Best for | OLTP, transactions | OLAP, analytics, aggregations |
+| Reads | Fast for full rows | Fast for column scans |
+| Writes | Fast `INSERT`/`UPDATE`/`DELETE` | Slower for writes, faster bulk loads |
+| Compression | Less effective | Highly effective |
+| Typical queries | "Get user 123" | "Average age by city" |
+| Examples | PostgreSQL, MySQL, SQLite | Redshift, Snowflake, ClickHouse, Parquet |
+
+---
+
+## Quick Storage Summary
+
+- Use **row-oriented** storage for transactional systems where you frequently read, insert, or update whole records.
+- Use **column-oriented** storage for analytical systems where you run aggregations, reports, and scans over large datasets.
+- Many modern systems use both: a row-oriented database for daily operations, and a column-oriented warehouse for analytics.
