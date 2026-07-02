@@ -394,7 +394,37 @@ Docker lets you package your app and its dependencies together. For a full-stack
 1. A **Node.js container** running Next.js.
 2. A **database container** (PostgreSQL, MySQL, etc.).
 
-### 5.1 Development setup with Docker Compose
+### 5.1 Where is the database data actually stored?
+
+This is the part that confuses almost everyone at first. The short answer is: **your 10 GB of data is not inside the container itself**. It is stored in a **Docker volume**, which is a folder on your host machine's disk that Docker manages.
+
+Think of three layers:
+
+| Layer | What it is | Is it persistent? | Stores your 10 GB? |
+|-------|-----------|-------------------|-------------------|
+| **Image** | Read-only blueprint used to create containers | Yes, on disk as a file | No, only the app/OS bits |
+| **Container** | Running instance of an image | **No**, by default | Only temporary files written while running |
+| **Volume** | Special folder on the host mounted into the container | Yes, survives container deletion | **Yes**, this is where database files live |
+
+When you run PostgreSQL inside Docker, the actual database files live at `/var/lib/postgresql/data` **inside** the container. But in the `docker-compose.yml` we map that path to a volume:
+
+```yaml
+volumes:
+  - postgres-data:/var/lib/postgresql/data
+```
+
+`postgres-data` is a Docker volume. Docker creates a real directory somewhere on your host (for example, under `/var/lib/docker/volumes/` on Linux) and mounts it into the container. PostgreSQL writes to `/var/lib/postgresql/data` as if it were local, but the bytes are actually landing on your host disk.
+
+This means:
+
+- If you stop the container, the 10 GB is still there.
+- If you delete the container (`docker-compose down`), the 10 GB is still there.
+- If you delete the **volume** (`docker-compose down -v`), the 10 GB is gone forever.
+- The container itself stays lightweight; it does not balloon to 10 GB.
+
+So Docker is not a magical black box swallowing your data. It is just a process manager, and a **volume** is the persistent hard drive you attach to that process.
+
+### 5.2 Development setup with Docker Compose
 
 Create a `docker-compose.yml` file:
 
@@ -463,7 +493,7 @@ Apply migrations inside the running container:
 docker-compose exec app npx prisma migrate dev
 ```
 
-### 5.2 Production Dockerfile
+### 5.3 Production Dockerfile
 
 For production, you want a smaller, optimized image.
 
@@ -514,7 +544,7 @@ What happens at startup:
 1. `npx prisma migrate deploy` applies pending migrations.
 2. `npm start` runs the production Next.js server.
 
-### 5.3 Production docker-compose example
+### 5.4 Production docker-compose example
 
 ```yaml
 # docker-compose.prod.yml
@@ -560,7 +590,7 @@ Deploy:
 docker-compose -f docker-compose.prod.yml up --build -d
 ```
 
-### 5.4 Deployment checklist
+### 5.5 Deployment checklist
 
 | Step | Why it matters |
 |------|----------------|
